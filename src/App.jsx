@@ -1,11 +1,10 @@
 import React, { useRef, useEffect, useState } from 'react';
 import io from 'socket.io-client';
 
-<<<<<<< HEAD
-const socket = io('https://video-call-backend-production-01ce.up.railway.app'); // ✅ Replace with your actual deployed backend
-=======
+
+
 const socket = io('https://video-call-backend-production-01ce.up.railway.app'); // Backend
->>>>>>> 6f327cffe869bc99428644136c3275c4fcece9c4
+
 
 const VideoCall = () => {
   const localVideo = useRef(null);
