@@ -1,34 +1,43 @@
 import React, { useRef, useEffect, useState } from 'react';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:3000'); // Backend
+const socket = io('https://your-backend-url.onrender.com'); // ✅ Replace with your actual deployed backend
 
 const VideoCall = () => {
-  const localVideo = useRef();
-  const remoteVideo = useRef();
+  const localVideo = useRef(null);
+  const remoteVideo = useRef(null);
   const peerConnection = useRef(null);
-  const [roomId] = useState('demo-room'); // static room
+  const [roomId] = useState('demo-room');
+  const [remoteSocketId, setRemoteSocketId] = useState(null);
+  const [incomingCall, setIncomingCall] = useState(false);
+  const [connectedUsers, setConnectedUsers] = useState(1); // include yourself by default
 
   useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
+    // Get local video stream
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
       localVideo.current.srcObject = stream;
 
+      // Join room
       socket.emit('join', roomId);
 
-      socket.on('user-joined', async (userId) => {
-        peerConnection.current = createPeer();
-        stream.getTracks().forEach(track => peerConnection.current.addTrack(track, stream));
-
-        const offer = await peerConnection.current.createOffer();
-        await peerConnection.current.setLocalDescription(offer);
-
-        socket.emit('offer', { offer, to: userId });
+      // 🟢 New user joined
+      socket.on('user-joined', (userId, totalUsers) => {
+        setRemoteSocketId(userId);
+        setIncomingCall(true);
+        setConnectedUsers(totalUsers);
       });
 
-      socket.on('offer', async ({ offer, from }) => {
-        peerConnection.current = createPeer();
+      // 👥 Total connected users updated
+      socket.on('update-user-count', (totalUsers) => {
+        setConnectedUsers(totalUsers);
+      });
 
-        stream.getTracks().forEach(track => peerConnection.current.addTrack(track, stream));
+      // 📞 Offer received
+      socket.on('offer', async ({ offer, from }) => {
+        setRemoteSocketId(from);
+        peerConnection.current = createPeer(from);
+
+        stream.getTracks().forEach((track) => peerConnection.current.addTrack(track, stream));
         await peerConnection.current.setRemoteDescription(new RTCSessionDescription(offer));
 
         const answer = await peerConnection.current.createAnswer();
@@ -37,22 +46,35 @@ const VideoCall = () => {
         socket.emit('answer', { answer, to: from });
       });
 
+      // 📞 Answer received
       socket.on('answer', async ({ answer }) => {
         await peerConnection.current.setRemoteDescription(new RTCSessionDescription(answer));
       });
 
+      // ❄️ ICE candidate exchange
       socket.on('ice-candidate', ({ candidate }) => {
         peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+      });
+
+      // ❌ User disconnected
+      socket.on('user-left', (totalUsers) => {
+        setConnectedUsers(totalUsers);
+        remoteVideo.current.srcObject = null;
+        if (peerConnection.current) {
+          peerConnection.current.close();
+          peerConnection.current = null;
+        }
       });
     });
   }, []);
 
-  const createPeer = () => {
+  // 👤 Create peer connection
+  const createPeer = (targetId) => {
     const pc = new RTCPeerConnection();
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
-        socket.emit('ice-candidate', { candidate: e.candidate, to: 'peerId' }); // You need to track `to`
+        socket.emit('ice-candidate', { candidate: e.candidate, to: targetId });
       }
     };
 
@@ -63,11 +85,44 @@ const VideoCall = () => {
     return pc;
   };
 
+  // 📞 Start outgoing call
+  const startCall = async () => {
+    const stream = localVideo.current.srcObject;
+    peerConnection.current = createPeer(remoteSocketId);
+
+    stream.getTracks().forEach((track) => peerConnection.current.addTrack(track, stream));
+
+    const offer = await peerConnection.current.createOffer();
+    await peerConnection.current.setLocalDescription(offer);
+
+    socket.emit('offer', { offer, to: remoteSocketId });
+    setIncomingCall(false);
+  };
+
   return (
-    <div>
-      <h2>Video Call</h2>
-      <video ref={localVideo} autoPlay muted style={{ width: '45%' }} />
-      <video ref={remoteVideo} autoPlay style={{ width: '45%' }} />
+    <div style={{ textAlign: 'center', padding: '20px' }}>
+      <h2>🔴 Video Call Room</h2>
+      <p>Room ID: <b>{roomId}</b></p>
+      <p>👥 Users Connected: {connectedUsers}</p>
+
+      {incomingCall && (
+        <div style={{ backgroundColor: '#ffeeba', padding: '10px', marginBottom: '20px' }}>
+          <p>📞 Someone is calling. Do you want to accept?</p>
+          <button onClick={startCall} style={{ marginRight: '10px' }}>✅ Accept</button>
+          <button onClick={() => setIncomingCall(false)}>❌ Reject</button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '20px' }}>
+        <div>
+          <h4>📷 You</h4>
+          <video ref={localVideo} autoPlay muted playsInline style={{ width: '300px', borderRadius: '8px' }} />
+        </div>
+        <div>
+          <h4>🎥 Remote</h4>
+          <video ref={remoteVideo} autoPlay playsInline style={{ width: '300px', borderRadius: '8px' }} />
+        </div>
+      </div>
     </div>
   );
 };
