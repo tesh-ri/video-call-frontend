@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import io from 'socket.io-client';
 
 
-const socket = io('https://video-call-backend-production-01ce.up.railway.app'); // ✅ Replace with your actual deployed backend
+const socket = io('https://video-call-backend-g1eh.onrender.com'); // ✅ Replace with your actual deployed backend
 
 
 const VideoCall = () => {
