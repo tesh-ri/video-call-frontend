@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:3000'); // Backend
+const socket = io('https://video-call-backend-production-01ce.up.railway.app'); // Backend
 
 const VideoCall = () => {
   const localVideo = useRef();
